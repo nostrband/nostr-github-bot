@@ -65,11 +65,11 @@ function convertToTimestamp(dateString) {
 }
 
 async function publishRepo(event) {
-  console.log(JSON.stringify(event), 'EVEEEEENT');
   const ndkEvent = new NDKEvent(ndk);
   ndkEvent.kind = KIND_TEST;
   ndkEvent.pubkey = BOT_PUBKEY;
   ndkEvent.created_at = event.created_at;
+  ndkEvent.content = '';
   ndkEvent.tags = event.tags;
 
   const relaySet = NDKRelaySet.fromRelayUrls(
