@@ -5,6 +5,7 @@ const {
   default: NDK,
   default: NDKEvent,
   NDKRelaySet,
+  NDKPrivateKeySigner,
 } = require('@nostr-dev-kit/ndk');
 
 const curve = new ec('secp256k1');
@@ -42,11 +43,11 @@ const BOT_PUBKEY = getPublicKeyFromPrivateKey(privateKey);
 const KIND_TEST = 100030117;
 const KIND_REAL = 30117;
 
-function localSigner(message) {
-  const keyPair = curve.keyFromPrivate(privateKey, 'hex');
-  const signature = keyPair.sign(message);
-  return signature.toDER('hex');
+if (!privateKey) {
+  privateKey = generateAndSavePrivateKey(PRIVATE_KEY_PATH);
 }
+
+const signer = new NDKPrivateKeySigner(privateKey);
 
 const ndk = new NDK({
   relays: [
@@ -55,7 +56,7 @@ const ndk = new NDK({
     'wss://relay.damus.io',
     'wss://nostr.mutinywallet.com',
   ],
-  localSigner: localSigner,
+  signer: signer,
 });
 
 function convertToTimestamp(dateString) {
@@ -63,22 +64,13 @@ function convertToTimestamp(dateString) {
   return Math.floor(dateObject.getTime() / 1000);
 }
 
-async function publishRepo(repo) {
-  const published_at = convertToTimestamp(repo.created_at);
+async function publishRepo(event) {
+  console.log(JSON.stringify(event), 'EVEEEEENT');
   const ndkEvent = new NDKEvent(ndk);
   ndkEvent.kind = KIND_TEST;
   ndkEvent.pubkey = BOT_PUBKEY;
-  ndkEvent.created_at = published_at;
-  ndkEvent.tags = [
-    ['title', repo.name],
-    ['description', repo.description],
-    ['r', repo.html_url],
-    ['license', repo.license?.key || 'none'],
-    ['d', `${repo.owner.login}/${repo.name}`],
-    ['l', repo.language, 'programming-languages'],
-    ['published_at', published_at],
-    ['alt', `Code repository: ${repo.name}`],
-  ];
+  ndkEvent.created_at = event.created_at;
+  ndkEvent.tags = event.tags;
 
   const relaySet = NDKRelaySet.fromRelayUrls(
     [
@@ -89,7 +81,6 @@ async function publishRepo(repo) {
     ],
     ndk
   );
-
   const result = await ndkEvent.publish(relaySet);
 }
 
@@ -103,7 +94,28 @@ async function scanGithub() {
       if (!response.data.items.length) break;
 
       for (const repo of response.data.items) {
-        await publishRepo(repo);
+        const tags = [
+          ['title', repo.name],
+          ['description', repo.description],
+          ['r', repo.html_url],
+          ['d', `${repo.owner.login}/${repo.name}`],
+          ['published_at', convertToTimestamp(repo.created_at)],
+          ['alt', `Code repository: ${repo.name}`],
+        ];
+
+        if (repo.license?.key) {
+          tags.push(['license', repo.license.key]);
+        }
+
+        if (repo.language) {
+          tags.push(['l', repo.language, 'programming-languages']);
+        }
+
+        const event = {
+          created_at: convertToTimestamp(repo.created_at),
+          tags,
+        };
+        await publishRepo(event);
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
       page++;
