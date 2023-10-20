@@ -1,25 +1,16 @@
+require('websocket-polyfill')
+
 const fs = require('fs');
-const { ec } = require('elliptic');
 const axios = require('axios').default;
 const {
   default: NDK,
-  default: NDKEvent,
+  NDKEvent,
   NDKRelaySet,
   NDKPrivateKeySigner,
 } = require('@nostr-dev-kit/ndk');
+const { generatePrivateKey, getPublicKey } = require('nostr-tools');
 
-const curve = new ec('secp256k1');
 const PRIVATE_KEY_PATH = './privateKey.txt';
-
-function generatePrivateKey() {
-  const keyPair = curve.genKeyPair();
-  return keyPair.getPrivate('hex');
-}
-
-function getPublicKeyFromPrivateKey(privateKey) {
-  const keyPair = curve.keyFromPrivate(privateKey, 'hex');
-  return keyPair.getPublic(true, 'hex');
-}
 
 function readPrivateKeyFromFile(filePath) {
   if (fs.existsSync(filePath)) {
@@ -39,7 +30,7 @@ if (!privateKey) {
   privateKey = generateAndSavePrivateKey(PRIVATE_KEY_PATH);
 }
 
-const BOT_PUBKEY = getPublicKeyFromPrivateKey(privateKey);
+const BOT_PUBKEY = getPublicKey(privateKey);
 const KIND_TEST = 100030117;
 const KIND_REAL = 30117;
 
@@ -49,42 +40,36 @@ if (!privateKey) {
 
 const signer = new NDKPrivateKeySigner(privateKey);
 
-const ndk = new NDK({
-  relays: [
-    'wss://relay.nostr.band/all',
-    'wss://nos.lol',
-    'wss://relay.damus.io',
-    'wss://nostr.mutinywallet.com',
-  ],
-  signer: signer,
-});
-
 function convertToTimestamp(dateString) {
   const dateObject = new Date(dateString);
   return Math.floor(dateObject.getTime() / 1000);
 }
 
-async function publishRepo(event) {
+async function publishRepo(ndk, event) {
   const ndkEvent = new NDKEvent(ndk);
   ndkEvent.kind = KIND_TEST;
   ndkEvent.pubkey = BOT_PUBKEY;
   ndkEvent.created_at = event.created_at;
   ndkEvent.content = '';
   ndkEvent.tags = event.tags;
+  console.log("publishing", JSON.stringify(ndkEvent.rawEvent()))
+  const result = await ndkEvent.publish();
+  console.log("result", JSON.stringify(result))
+}
 
-  const relaySet = NDKRelaySet.fromRelayUrls(
-    [
+async function scanGithub() {
+  const ndk = new NDK({
+    explicitRelayUrls: [
       'wss://relay.nostr.band/all',
       'wss://nos.lol',
       'wss://relay.damus.io',
       'wss://nostr.mutinywallet.com',
     ],
-    ndk
-  );
-  const result = await ndkEvent.publish(relaySet);
-}
+    signer: signer,
+  });
+  
+  await ndk.connect()
 
-async function scanGithub() {
   let page = 1;
   const baseURL =
     'https://api.github.com/search/repositories?q=nostr&per_page=100&page=';
@@ -94,13 +79,15 @@ async function scanGithub() {
       if (!response.data.items.length) break;
 
       for (const repo of response.data.items) {
+        console.log("repo", JSON.stringify(repo))
         const tags = [
           ['title', repo.name],
           ['description', repo.description],
           ['r', repo.html_url],
-          ['d', `${repo.owner.login}/${repo.name}`],
-          ['published_at', convertToTimestamp(repo.created_at)],
+          ['d', repo.html_url],
+          ['published_at', ""+convertToTimestamp(repo.created_at)],
           ['alt', `Code repository: ${repo.name}`],
+          ['L', 'programming-languages']
         ];
 
         if (repo.license?.key) {
@@ -115,7 +102,7 @@ async function scanGithub() {
           created_at: convertToTimestamp(repo.created_at),
           tags,
         };
-        await publishRepo(event);
+        await publishRepo(ndk, event);
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
       page++;
@@ -124,6 +111,10 @@ async function scanGithub() {
       break;
     }
   }
+
+  // disconnect to release the relays etc
+  for (const r of ndk.pool.relays.values())
+    r.disconnect()
 }
 
 (async () => {
