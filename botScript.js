@@ -1,4 +1,4 @@
-require('websocket-polyfill')
+require('websocket-polyfill');
 
 const fs = require('fs');
 const axios = require('axios').default;
@@ -52,9 +52,9 @@ async function publishRepo(ndk, event) {
   ndkEvent.created_at = event.created_at;
   ndkEvent.content = '';
   ndkEvent.tags = event.tags;
-  console.log("publishing", JSON.stringify(ndkEvent.rawEvent()))
+  console.log('publishing', JSON.stringify(ndkEvent.rawEvent()));
   const result = await ndkEvent.publish();
-  console.log("result", JSON.stringify(result))
+  console.log('result', JSON.stringify(result));
 }
 
 async function scanGithub() {
@@ -67,8 +67,8 @@ async function scanGithub() {
     ],
     signer: signer,
   });
-  
-  await ndk.connect()
+
+  await ndk.connect();
 
   let page = 1;
   const baseURL =
@@ -79,15 +79,15 @@ async function scanGithub() {
       if (!response.data.items.length) break;
 
       for (const repo of response.data.items) {
-        console.log("repo", JSON.stringify(repo))
+        console.log('repo', JSON.stringify(repo));
         const tags = [
           ['title', repo.name],
           ['description', repo.description],
           ['r', repo.html_url],
           ['d', repo.html_url],
-          ['published_at', ""+convertToTimestamp(repo.created_at)],
+          ['published_at', '' + convertToTimestamp(repo.created_at)],
           ['alt', `Code repository: ${repo.name}`],
-          ['L', 'programming-languages']
+          ['L', 'programming-languages'],
         ];
 
         if (repo.license?.key) {
@@ -113,8 +113,7 @@ async function scanGithub() {
   }
 
   // disconnect to release the relays etc
-  for (const r of ndk.pool.relays.values())
-    r.disconnect()
+  for (const r of ndk.pool.relays.values()) r.disconnect();
 }
 
 (async () => {
