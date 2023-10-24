@@ -8,58 +8,33 @@ const readRelays = [
   'wss://relay.nostr.band/all',
   'wss://nos.lol',
   'wss://relay.damus.io',
+  'wss://nostr.mutinywallet.com',
 ];
-const writeRelays = [...readRelays, 'wss://nostr.mutinywallet.com']; // for broadcasting
 
-async function createConnectNDK(custom_relays) {
-  // FIXME the issue is that NDK would return EOSE even if some dumb relay
-  // returns EOSE immediately w/o returning anything, while others are trying to stream the
-  // data, which takes some time. And so instead of getting a merged result from
-  // several relays, you get truncated result from just one of them
-
-  const relays = [...new Set([...readRelays, ...writeRelays])];
-  if (custom_relays) relays.push(...custom_relays);
-  const nip07signer = nostrEnabled ? new NDKNip07Signer() : null;
-  ndkObject = new NDK({ explicitRelayUrls: relays, signer: nip07signer });
-  await ndkObject.connect();
-}
-
-export async function getNDK(relays) {
-  if (ndkObject) {
-    // FIXME add relays to the pool
-    return ndkObject;
-  }
-
-  return new Promise(async function (ok) {
-    await createConnectNDK(relays);
-    ok(ndkObject);
-  });
-}
-
-export function getTags(e, name) {
+function getTags(e, name) {
   return e.tags.filter((t) => t.length > 0 && t[0] === name);
 }
 
-export function getTag(e, name) {
+function getTag(e, name) {
   const tags = getTags(e, name);
   if (tags.length === 0) return null;
   return tags[0];
 }
 
-export function getTagValue(e, name, index, def) {
+function getTagValue(e, name, index, def) {
   const tag = getTag(e, name);
   if (tag === null || !tag.length || (index && index >= tag.length))
     return def !== undefined ? def : '';
   return tag[1 + (index || 0)];
 }
 
-export function getEventTagA(e) {
+function getEventTagA(e) {
   let addr = e.kind + ':' + e.pubkey + ':';
   if (e.kind >= 30000 && e.kind < 40000) addr += getTagValue(e, 'd');
   return addr;
 }
 
-export function dedupEvents(events) {
+function dedupEvents(events) {
   const map = {};
   for (const e of events) {
     let addr = e.id;
@@ -78,7 +53,7 @@ export function dedupEvents(events) {
   return Object.values(map);
 }
 
-export async function fetchAllEvents(reqs) {
+async function fetchAllEvents(reqs) {
   const results = await Promise.allSettled(reqs);
   let events = [];
   for (const r of results) {
@@ -93,7 +68,7 @@ export async function fetchAllEvents(reqs) {
   return dedupEvents(events);
 }
 
-export function startFetch(ndk, filter) {
+function startFetch(ndk, filter) {
   const relaySet = NDKRelaySet.fromRelayUrls(readRelays, ndk);
   // have to reimplement the ndk's fetchEvents method to allow:
   // - relaySet - only read relays to exclude the mutiny relay that returns EOSE on everything which
@@ -116,3 +91,13 @@ export function startFetch(ndk, filter) {
     });
   });
 }
+
+module.exports = {
+  getTags,
+  getTag,
+  getTagValue,
+  getEventTagA,
+  dedupEvents,
+  fetchAllEvents,
+  startFetch,
+};
