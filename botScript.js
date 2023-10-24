@@ -1,5 +1,4 @@
 require('websocket-polyfill');
-
 const fs = require('fs');
 const axios = require('axios').default;
 const {
@@ -8,9 +7,18 @@ const {
   NDKRelaySet,
   NDKPrivateKeySigner,
 } = require('@nostr-dev-kit/ndk');
-const { generatePrivateKey, getPublicKey } = require('nostr-tools');
+const { generatePrivateKey, getPublicKey, nip19 } = require('nostr-tools');
+const { decode } = require('punycode');
+const { fetchAllEvents, getNDK, startFetch } = require('./common');
 
 const PRIVATE_KEY_PATH = './privateKey.txt';
+
+const axiosInstance = axios.create({
+  baseURL: '',
+  headers: {
+    Authorization: `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`,
+  },
+});
 
 function readPrivateKeyFromFile(filePath) {
   if (fs.existsSync(filePath)) {
@@ -18,7 +26,6 @@ function readPrivateKeyFromFile(filePath) {
   }
   return null;
 }
-
 function generateAndSavePrivateKey(filePath) {
   const newPrivateKey = generatePrivateKey();
   fs.writeFileSync(filePath, newPrivateKey, 'utf8');
@@ -30,9 +37,13 @@ if (!privateKey) {
   privateKey = generateAndSavePrivateKey(PRIVATE_KEY_PATH);
 }
 
+let page = 1;
+const baseURL =
+  'https://api.github.com/search/repositories?q=nostr&per_page=100&page=';
 const BOT_PUBKEY = getPublicKey(privateKey);
 const KIND_TEST = 100030117;
 const KIND_REAL = 30117;
+const REGEX = /npub1[023456789acdefghjklmnpqrstuvwxyz]{6,}/g;
 
 if (!privateKey) {
   privateKey = generateAndSavePrivateKey(PRIVATE_KEY_PATH);
@@ -43,6 +54,60 @@ const signer = new NDKPrivateKeySigner(privateKey);
 function convertToTimestamp(dateString) {
   const dateObject = new Date(dateString);
   return Math.floor(dateObject.getTime() / 1000);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getContributorsForRepo(contributors_url) {
+  try {
+    const response = await axiosInstance.get(
+      contributors_url + '?per_page=100'
+    );
+    return response.data.map((contributor) => ({
+      login: contributor.login,
+      contributions: contributor.contributions,
+      url: contributor.url,
+    }));
+  } catch (error) {
+    console.error('Error fetching contributors:', error);
+    return [];
+  }
+}
+
+async function getUserDetails(user_url) {
+  try {
+    const response = await axiosInstance.get(user_url);
+    const { name, twitter_username, blog, bio } = response.data;
+
+    let pubkeyMatch = null;
+
+    const blogMatches = blog?.match(REGEX);
+    if (blogMatches && blogMatches.length > 0) {
+      pubkeyMatch = blogMatches[0];
+    }
+
+    if (!pubkeyMatch) {
+      const bioMatches = bio?.match(REGEX);
+      if (bioMatches && bioMatches.length > 0) {
+        pubkeyMatch = bioMatches[0];
+      }
+    }
+
+    if (pubkeyMatch) {
+      const decoded = nip19.decode(pubkeyMatch);
+      if (decoded && decoded.type === 'npub') {
+        pubkeyMatch = decoded.data;
+      } else {
+        pubkeyMatch = null;
+      }
+    }
+    return { name, twitter_username, blog, bio, pubkey: pubkeyMatch };
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+    return null;
+  }
 }
 
 async function publishRepo(ndk, event) {
@@ -70,16 +135,10 @@ async function scanGithub() {
 
   await ndk.connect();
 
-  let page = 1;
-  const baseURL =
-    'https://api.github.com/search/repositories?q=nostr&per_page=100&page=';
   while (true) {
     try {
-      const response = await axios.get(baseURL + page);
-      if (!response.data.items.length) break;
-
+      const response = await axiosInstance.get(baseURL + page);
       for (const repo of response.data.items) {
-        console.log('repo', JSON.stringify(repo));
         const tags = [
           ['title', repo.name],
           ['description', repo.description],
@@ -102,6 +161,16 @@ async function scanGithub() {
           created_at: convertToTimestamp(repo.created_at),
           tags,
         };
+
+        const contributors = await getContributorsForRepo(
+          repo.contributors_url
+        );
+        await delay(1000);
+        for (const contributor of contributors) {
+          const userDetails = await getUserDetails(contributor.url);
+          await delay(1000);
+        }
+
         await publishRepo(ndk, event);
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
