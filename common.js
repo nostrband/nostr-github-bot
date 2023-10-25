@@ -4,13 +4,6 @@ const {
   NDKNip07Signer,
 } = require('@nostr-dev-kit/ndk');
 
-const readRelays = [
-  'wss://relay.nostr.band/all',
-  'wss://nos.lol',
-  'wss://relay.damus.io',
-  'wss://nostr.mutinywallet.com',
-];
-
 function getTags(e, name) {
   return e.tags.filter((t) => t.length > 0 && t[0] === name);
 }
@@ -69,7 +62,7 @@ async function fetchAllEvents(reqs) {
 }
 
 function startFetch(ndk, filter) {
-  const relaySet = NDKRelaySet.fromRelayUrls(readRelays, ndk);
+//  const relaySet = NDKRelaySet.fromRelayUrls(readRelays, ndk);
   // have to reimplement the ndk's fetchEvents method to allow:
   // - relaySet - only read relays to exclude the mutiny relay that returns EOSE on everything which
   // breaks the NDK's internal EOSE handling (sends eose too early assuming this "fast" relay has sent all we need)
@@ -77,18 +70,26 @@ function startFetch(ndk, filter) {
   return new Promise((resolve) => {
     const events = [];
     const opts = {};
+    let timeout = null
     const relaySetSubscription = ndk.subscribe(
       filter,
       { ...opts, closeOnEose: true },
-      relaySet
+//      relaySet
     );
     relaySetSubscription.on('event', (event) => {
+      clearTimeout(timeout)
       event.ndk = this;
       events.push(event);
     });
     relaySetSubscription.on('eose', () => {
+      clearTimeout(timeout)
       resolve(events);
     });
+    timeout = setTimeout(() => {
+      relaySetSubscription.stop();
+      console.log("relay timeout")
+      resolve(events)
+    }, 30000)
   });
 }
 
