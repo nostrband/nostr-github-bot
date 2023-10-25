@@ -254,7 +254,7 @@ async function scanGithub() {
           ['r', repo.html_url],
           ['d', id],
           ['published_at', '' + convertToTimestamp(repo.created_at)],
-          ['alt', `Code repository: ${repo.name}`],
+          ['alt', `Code repository: ${repo.html_url}`],
           ['L', 'programming-languages'],
         ];
 
