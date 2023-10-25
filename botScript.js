@@ -22,7 +22,7 @@ const baseURL =
 let ndk = null;
 let searchNdk = null;
 
-const FORCE_UPDATE = true
+const FORCE_UPDATE = false
 
 const axiosInstance = axios.create({
   baseURL: '',
