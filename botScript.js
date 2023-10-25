@@ -250,7 +250,6 @@ async function scanGithub() {
 
         const tags = [
           ['title', repo.name],
-          ['description', repo.description],
           ['r', repo.html_url],
           ['d', id],
           ['published_at', '' + convertToTimestamp(repo.created_at)],
@@ -258,9 +257,11 @@ async function scanGithub() {
           ['L', 'programming-languages'],
         ];
 
-        for (const t of repo.topics) {
+        if (repo.description)
+          tags.push(['description', repo.description])
+
+        for (const t of repo.topics)
           tags.push(['t', t])
-        }
 
         if (repo.license?.key) {
           tags.push(['license', repo.license.key]);
