@@ -16,13 +16,13 @@ const REGEX = /npub1[023456789acdefghjklmnpqrstuvwxyz]{6,}/g;
 let privateKey = readFromFile(PRIVATE_KEY_PATH);
 const githubToken = readFromFile(GITHUB_TOKEN_PATH);
 const BOT_PUBKEY = getPublicKey(privateKey);
+const FORCE_UPDATE = false
+const SORT = 'updated' 
 const baseURL =
-  'https://api.github.com/search/repositories?q=nostr&per_page=100&page=';
+  `https://api.github.com/search/repositories?q=nostr&per_page=100&sort=${SORT}&page=`;
 
 let ndk = null;
 let searchNdk = null;
-
-const FORCE_UPDATE = false
 
 const axiosInstance = axios.create({
   baseURL: '',
@@ -210,8 +210,18 @@ async function publishRepo(event) {
   ndkEvent.content = '';
   ndkEvent.tags = event.tags;
   console.log('publishing', JSON.stringify(await ndkEvent.toNostrEvent()));
-  const result = await ndkEvent.publish();
-  console.log('result', JSON.stringify(result));
+  do {
+    try {
+      const result = await ndkEvent.publish();
+      console.log('result', JSON.stringify(result));
+      return
+
+    } catch (e) {
+      console.log('error', e);
+      await delay(10000)
+    }
+  }
+  while (true);
 }
 
 async function scanGithub() {
@@ -322,8 +332,12 @@ async function scanGithub() {
         }
         await publishRepo(event);
         await delay(5000);
-    }
+      }
       page++;
+
+      // only 1k
+      if (page > 10)
+        break;
     } catch (error) {
       console.error('Error scanning GitHub:', error);
       break;
