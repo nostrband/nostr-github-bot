@@ -17,7 +17,8 @@ let privateKey = readFromFile(PRIVATE_KEY_PATH);
 const githubToken = readFromFile(GITHUB_TOKEN_PATH);
 const BOT_PUBKEY = getPublicKey(privateKey);
 const FORCE_UPDATE = false
-const SORT = 'updated' 
+const SORT = 'updated'
+const REPO = ''//'quentintaranpino/nostrcheck-api-ts' 
 const baseURL =
   `https://api.github.com/search/repositories?q=nostr&per_page=100&sort=${SORT}&page=`;
 
@@ -243,13 +244,16 @@ async function scanGithub() {
     await ndk.connect();
     
     try {
-      const response = await axiosInstance.get(baseURL + page);
+      const response = REPO 
+        ? ({data: {items: [(await axiosInstance.get("https://api.github.com/repos/" + REPO)).data]}})
+        : (await axiosInstance.get(baseURL + page));
+      //console.log("response", JSON.stringify(response))
       for (const repo of response.data.items) {
 
         const id = repo.html_url.replace(/^https:\/\//i,'')
-        const updated_at = convertToTimestamp(repo.created_at)
+        const updated_at = convertToTimestamp(repo.pushed_at)
         //console.log("repo", JSON.stringify(repo))
-        console.log("got repo", id, "updated", repo.updated_at, updated_at)
+        console.log("got repo", id, "pushed_at", repo.pushed_at)
 
         const oldRepo = await getRepo(id)
         console.log("oldRepo", oldRepo?.id, oldRepo?.created_at)
@@ -336,7 +340,7 @@ async function scanGithub() {
       page++;
 
       // only 1k
-      if (page > 10)
+      if (REPO || page > 10)
         break;
     } catch (error) {
       console.error('Error scanning GitHub:', error);
@@ -351,6 +355,7 @@ async function scanGithub() {
 }
 
 (async () => {
-  setInterval(scanGithub, 24 * 60 * 60 * 1000);
   scanGithub();
+  if (REPO) return
+  setTimeout(scanGithub, 24 * 60 * 60 * 1000);
 })();
