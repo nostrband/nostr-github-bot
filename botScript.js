@@ -48,8 +48,6 @@ if (!privateKey) {
   privateKey = generateAndSavePrivateKey(PRIVATE_KEY_PATH);
 }
 
-let page = 1;
-
 const KIND_TEST = 9930117;
 const KIND_REAL = 30117;
 const KIND = KIND_REAL
@@ -226,7 +224,8 @@ async function publishRepo(event) {
 }
 
 async function scanGithub() {
-  while (true) {
+  let page = 1;
+  while (page <= 10) {
     searchNdk = new NDK({
       explicitRelayUrls: ['wss://relay.nostr.band/all'],
     });
@@ -340,7 +339,7 @@ async function scanGithub() {
       page++;
 
       // only 1k
-      if (REPO || page > 10)
+      if (REPO)
         break;
     } catch (error) {
       console.error('Error scanning GitHub:', error);
@@ -350,8 +349,11 @@ async function scanGithub() {
   // disconnect to release the relays etc
   for (const r of ndk.pool.relays.values()) r.disconnect();
   for (const r of searchNdk.pool.relays.values()) r.disconnect();
+
+  // reset
   ndk = null;
   searchNdk = null;
+  page = 1; 
 }
 
 (async () => {
