@@ -12,6 +12,7 @@
     "@nostr-dev-kit/ndk": "^2.0.3",
     "axios": "^1.5.1",
     "elliptic": "^6.5.4",
+    "nostr-pow": "^0.0.1",
     "nostr-tools": "^1.17.0",
     "websocket-polyfill": "^0.0.3",
     "ws": "^8.14.2"

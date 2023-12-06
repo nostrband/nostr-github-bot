@@ -8,6 +8,7 @@ const {
 } = require('@nostr-dev-kit/ndk');
 const { generatePrivateKey, getPublicKey, nip19 } = require('nostr-tools');
 const { fetchAllEvents, startFetch } = require('./common');
+const { computeAsync } = require('nostr-pow');
 
 // constants
 const PRIVATE_KEY_PATH = './privateKey.txt';
@@ -202,13 +203,27 @@ async function getRepo(dtag) {
 }
 
 async function publishRepo(event) {
-  const ndkEvent = new NDKEvent(ndk);
+  let e = {
+    kind: KIND,
+    pubkey: BOT_PUBKEY,
+    created_at: event.created_at,
+    content: '',
+    tags: event.tags
+  };
+  console.log(Date.now(), 'publishing', JSON.stringify(e));
+
+  e = await computeAsync(e, 30);
+  console.log(Date.now(), 'got pow', JSON.stringify(e));
+  
+  const ndkEvent = new NDKEvent(ndk, e);
+  /*
   ndkEvent.kind = KIND;
   ndkEvent.pubkey = BOT_PUBKEY;
   ndkEvent.created_at = event.created_at;
   ndkEvent.content = '';
   ndkEvent.tags = event.tags;
   console.log('publishing', JSON.stringify(await ndkEvent.toNostrEvent()));
+  */
   do {
     try {
       const result = await ndkEvent.publish();
@@ -328,7 +343,7 @@ async function scanGithub() {
           }
           console.log("contributor", contributor.login, userDetails.name, contributor.contributions, pubkey)
           if (pubkey) {
-            event.tags.push(['p', pubkey, 'contributor']);
+            event.tags.push(['p', pubkey, 'contributor', String(contributor.contributions)]);
             event.tags.push(['zap', pubkey, "wss://relay.nostr.band", String(contributor.contributions)]);
           }
           await delay(1000);
